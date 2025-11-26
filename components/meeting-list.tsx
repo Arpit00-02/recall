@@ -4,17 +4,18 @@ import { FileText, Clock } from 'lucide-react';
 import type { Meeting } from '@/types/database';
 
 export default async function MeetingList() {
-  const { data: meetings, error } = await supabase
-    .from('meetings')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(5);
+  try {
+    const { data: meetings, error } = await supabase
+      .from('meetings')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(5);
 
-  if (error || !meetings || meetings.length === 0) {
-    return null;
-  }
+    if (error || !meetings || meetings.length === 0) {
+      return null;
+    }
 
-  const formatDuration = (seconds: number | null) => {
+    const formatDuration = (seconds: number | null) => {
     if (!seconds) return '';
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -55,5 +56,8 @@ export default async function MeetingList() {
       </div>
     </div>
   );
+  } catch (err) {
+    return null;
+  }
 }
 

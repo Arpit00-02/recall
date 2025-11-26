@@ -36,9 +36,6 @@ export async function POST(request: NextRequest) {
       pathname: blob.pathname,
     });
   } catch (error: any) {
-    console.error('Upload error:', error);
-    
-    // Provide more specific error messages
     let errorMessage = 'Failed to upload file';
     if (error?.message?.includes('BLOB_STORE_ID') || error?.message?.includes('BLOB_READ_WRITE_TOKEN')) {
       errorMessage = 'Vercel Blob is not configured. Please run: npx vercel link && npx vercel env add VERCEL_BLOB_STORE_ID';

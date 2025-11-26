@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { groq, validateGroqConfig } from '@/lib/groq';
-import { supabase, validateSupabaseConfig } from '@/lib/supabase';
+import { createServerClient, validateSupabaseConfig } from '@/lib/supabase';
 import { del } from '@vercel/blob';
 
 export const runtime = 'nodejs';
@@ -37,34 +37,45 @@ function formatTranscript(segments: any[]): string {
 }
 
 export async function POST(request: NextRequest) {
+  let blobUrl: string | null = null;
+  
   try {
     // Validate environment variables at runtime
     validateGroqConfig();
     validateSupabaseConfig();
 
-    const { url, filename } = await request.json();
+    // Create a fresh Supabase client for this request
+    const supabase = createServerClient();
+
+    const body = await request.json();
+    const { url, filename } = body;
+    blobUrl = url;
 
     if (!url) {
       return NextResponse.json({ error: 'No file URL provided' }, { status: 400 });
     }
 
     // Step 1: Fetch the file from blob URL
-    console.log('Fetching file from blob...');
     const fileResponse = await fetch(url);
     if (!fileResponse.ok) {
-      throw new Error('Failed to fetch file from blob');
+      throw new Error(`Failed to fetch file from blob: ${fileResponse.status} ${fileResponse.statusText}`);
     }
     const fileBlob = await fileResponse.blob();
     const file = new File([fileBlob], filename || 'audio.mp4', { type: fileBlob.type });
 
     // Step 2: Transcribe with Groq Whisper
-    console.log('Starting transcription...');
-    const transcriptionResponse = await groq.audio.transcriptions.create({
-      file: file,
-      model: 'whisper-large-v3-turbo',
-      response_format: 'verbose_json',
-      timestamp_granularities: ['segment'],
-    });
+    let transcriptionResponse;
+    try {
+      transcriptionResponse = await groq.audio.transcriptions.create({
+        file: file,
+        model: 'whisper-large-v3-turbo',
+        response_format: 'verbose_json',
+        timestamp_granularities: ['segment'],
+      });
+    } catch (transcribeError: any) {
+      console.error('Transcription error:', transcribeError);
+      throw new Error(`Transcription failed: ${transcribeError?.message || 'Unknown error'}`);
+    }
 
     const transcription = transcriptionResponse as any;
     const segments = transcription.segments || [];
@@ -92,7 +103,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (meetingError || !meetingData) {
-      throw new Error(`Failed to create meeting: ${meetingError?.message}`);
+      throw new Error(`Failed to create meeting: ${meetingError?.message || 'No data returned'}`);
     }
 
     // Save chunks
@@ -109,7 +120,6 @@ export async function POST(request: NextRequest) {
       .insert(chunks);
 
     if (chunksError) {
-      console.error('Error saving chunks:', chunksError);
       // Continue anyway - meeting is created
     }
 
@@ -117,21 +127,37 @@ export async function POST(request: NextRequest) {
     console.log('Calling LLM for analysis...');
     const prompt = KILLER_PROMPT.replace('{transcript}', rawTranscript);
 
-    const completion = await groq.chat.completions.create({
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a helpful assistant that returns only valid JSON, no markdown formatting.',
-        },
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-      model: 'llama-3-70b-8192',
-      temperature: 0.3,
-      response_format: { type: 'json_object' },
-    });
+    // Step 5: Call LLM for summary, action items, topics
+    const models = ['llama-3.1-8b-instant', 'llama-3.3-70b-versatile', 'mixtral-8x7b-32768'];
+    let completion;
+    let lastError: any = null;
+    
+    for (const model of models) {
+      try {
+        completion = await groq.chat.completions.create({
+          messages: [
+            {
+              role: 'system',
+              content: 'You are a helpful assistant that returns only valid JSON, no markdown formatting.',
+            },
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+          model: model,
+          temperature: 0.3,
+          response_format: { type: 'json_object' },
+        });
+        break;
+      } catch (modelError: any) {
+        lastError = modelError;
+      }
+    }
+    
+    if (!completion) {
+      throw new Error(`LLM analysis failed: ${lastError?.message || 'Unknown error'}`);
+    }
 
     const llmResponse = completion.choices[0]?.message?.content;
     if (!llmResponse) {
@@ -142,12 +168,11 @@ export async function POST(request: NextRequest) {
     try {
       parsedResponse = JSON.parse(llmResponse);
     } catch (e) {
-      console.error('Failed to parse LLM response:', llmResponse);
       throw new Error('Invalid JSON from LLM');
     }
 
     // Step 6: Update meeting with LLM results
-    const { error: updateError } = await supabase
+    await supabase
       .from('meetings')
       .update({
         title: parsedResponse.title || filename || 'Untitled Meeting',
@@ -161,17 +186,11 @@ export async function POST(request: NextRequest) {
       })
       .eq('id', meetingData.id);
 
-    if (updateError) {
-      console.error('Error updating meeting:', updateError);
-      // Continue anyway - at least we have the transcript
-    }
-
     // Step 7: Delete the blob file
     try {
-      const blobPath = new URL(url).pathname;
+      const blobPath = new URL(blobUrl).pathname;
       await del(blobPath);
     } catch (deleteError) {
-      console.error('Error deleting blob:', deleteError);
       // Continue anyway - file will expire eventually
     }
 
@@ -180,21 +199,18 @@ export async function POST(request: NextRequest) {
       status: 'complete',
     });
   } catch (error: any) {
-    console.error('Processing error:', error);
-    
     // Try to delete blob on error
-    try {
-      const { url } = await request.json();
-      if (url) {
-        const blobPath = new URL(url).pathname;
+    if (blobUrl) {
+      try {
+        const blobPath = new URL(blobUrl).pathname;
         await del(blobPath);
+      } catch (deleteError) {
+        // Ignore deletion errors
       }
-    } catch (deleteError) {
-      console.error('Error deleting blob on failure:', deleteError);
     }
 
     return NextResponse.json(
-      { error: error.message || 'Something went wrong. Try uploading again.' },
+      { error: error?.message || 'Something went wrong. Try uploading again.' },
       { status: 500 }
     );
   }

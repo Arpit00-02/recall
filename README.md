@@ -43,9 +43,16 @@ npx vercel env add VERCEL_BLOB_STORE_ID
 Create a `.env.local` file:
 
 ```env
+# Groq API Key
 GROQ_API_KEY=your_groq_api_key
-SUPABASE_URL=your_supabase_url
-SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+
+# Vercel Blob
+BLOB_READ_WRITE_TOKEN=your_blob_token
+VERCEL_BLOB_STORE_ID=your_blob_store_id
 ```
 
 ### 5. Run the App

@@ -6,6 +6,14 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { supabase } from '@/lib/supabase';
 import { MessageSquare, Send, Clock } from 'lucide-react';
 import type { Meeting, Chunk, ActionItem, Topic } from '@/types/database';
@@ -82,7 +90,6 @@ export default function MeetingDetail({ meeting, chunks }: MeetingDetailProps) {
         }
       }
     } catch (error) {
-      console.error('Chat error:', error);
       setChatResponse('Sorry, something went wrong. Please try again.');
     } finally {
       setIsChatLoading(false);
@@ -204,30 +211,76 @@ export default function MeetingDetail({ meeting, chunks }: MeetingDetailProps) {
               </div>
             )}
 
-            {/* Chat */}
-            <div className="border-t border-border p-6 flex flex-col h-64">
-              <div className="flex items-center gap-2 mb-3">
-                <MessageSquare className="h-4 w-4" />
-                <h2 className="font-semibold">Ask anything</h2>
-              </div>
-              <form onSubmit={handleChatSubmit} className="flex-1 flex flex-col">
-                <Textarea
-                  value={chatMessage}
-                  onChange={(e) => setChatMessage(e.target.value)}
-                  placeholder="Ask a question about this meeting..."
-                  className="mb-2 flex-1 resize-none"
-                  disabled={isChatLoading}
-                />
-                <Button type="submit" disabled={!chatMessage.trim() || isChatLoading}>
-                  <Send className="h-4 w-4 mr-2" />
-                  Ask
-                </Button>
-              </form>
-              {chatResponse && (
-                <div className="mt-4 p-3 bg-muted rounded-md">
-                  <p className="text-sm whitespace-pre-wrap">{chatResponse}</p>
-                </div>
-              )}
+            {/* Ask Anything Button */}
+            <div className="border-t border-border p-6">
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start">
+                    <MessageSquare className="h-4 w-4 mr-2" />
+                    Ask anything
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      <MessageSquare className="h-5 w-5" />
+                      Ask anything about this meeting
+                    </DialogTitle>
+                    <DialogDescription>
+                      Ask questions and get AI-powered answers based on the meeting transcript
+                    </DialogDescription>
+                  </DialogHeader>
+                  
+                  <div className="flex-1 flex flex-col gap-4 overflow-hidden">
+                    {/* Chat Response Display */}
+                    {chatResponse && (
+                      <div className="flex-1 p-4 bg-muted rounded-lg border border-border overflow-auto">
+                        <div className="space-y-2">
+                          <div className="text-xs text-muted-foreground mb-2">Response:</div>
+                          <p className="text-sm leading-relaxed whitespace-pre-wrap">{chatResponse}</p>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Loading Indicator */}
+                    {isChatLoading && !chatResponse && (
+                      <div className="flex-1 flex items-center justify-center p-8">
+                        <div className="flex flex-col items-center gap-3">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                          <p className="text-sm text-muted-foreground">Thinking...</p>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Empty State */}
+                    {!chatResponse && !isChatLoading && (
+                      <div className="flex-1 flex items-center justify-center p-8 text-center">
+                        <div className="space-y-2">
+                          <MessageSquare className="h-12 w-12 mx-auto text-muted-foreground opacity-50" />
+                          <p className="text-sm text-muted-foreground">
+                            Ask a question about this meeting to get started
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Chat Input Form */}
+                    <form onSubmit={handleChatSubmit} className="flex flex-col gap-2 border-t border-border pt-4">
+                      <Textarea
+                        value={chatMessage}
+                        onChange={(e) => setChatMessage(e.target.value)}
+                        placeholder="Ask a question about this meeting..."
+                        className="resize-none min-h-[100px]"
+                        disabled={isChatLoading}
+                      />
+                      <Button type="submit" disabled={!chatMessage.trim() || isChatLoading} className="w-full">
+                        <Send className="h-4 w-4 mr-2" />
+                        {isChatLoading ? 'Asking...' : 'Ask'}
+                      </Button>
+                    </form>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
         </div>

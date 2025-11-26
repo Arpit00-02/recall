@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { groq, validateGroqConfig } from '@/lib/groq';
-import { supabase, validateSupabaseConfig } from '@/lib/supabase';
+import { createServerClient, validateSupabaseConfig } from '@/lib/supabase';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -10,6 +10,9 @@ export async function POST(request: NextRequest) {
     // Validate environment variables at runtime
     validateGroqConfig();
     validateSupabaseConfig();
+
+    // Create a fresh Supabase client for this request
+    const supabase = createServerClient();
 
     const { meetingId, question } = await request.json();
 
@@ -58,7 +61,7 @@ Answer:`;
           content: prompt,
         },
       ],
-      model: 'llama-3-70b-8192',
+      model: 'llama-3.1-8b-instant', // Using reliable Groq model
       temperature: 0.7,
       stream: true,
     });
@@ -86,7 +89,6 @@ Answer:`;
       },
     });
   } catch (error: any) {
-    console.error('Chat error:', error);
     return NextResponse.json(
       { error: error.message || 'Failed to get response' },
       { status: 500 }

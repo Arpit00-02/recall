@@ -27,27 +27,35 @@ export default function Sidebar() {
   }, [searchQuery]);
 
   async function loadMeetings() {
-    const { data, error } = await supabase
-      .from('meetings')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(50);
+    try {
+      const { data, error } = await supabase
+        .from('meetings')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50);
 
-    if (!error && data) {
-      setMeetings(data);
+      if (!error && data) {
+        setMeetings(data);
+      }
+    } catch (err) {
+      // Silently fail
     }
   }
 
   async function searchMeetings(query: string) {
-    const { data, error } = await supabase
-      .from('meetings')
-      .select('*')
-      .textSearch('search_vector', query)
-      .order('created_at', { ascending: false })
-      .limit(50);
+    try {
+      const { data, error } = await supabase
+        .from('meetings')
+        .select('*')
+        .textSearch('search_vector', query)
+        .order('created_at', { ascending: false })
+        .limit(50);
 
-    if (!error && data) {
-      setMeetings(data);
+      if (!error && data) {
+        setMeetings(data);
+      }
+    } catch (err) {
+      // Silently fail
     }
   }
 
