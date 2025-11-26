@@ -187,11 +187,13 @@ export async function POST(request: NextRequest) {
       .eq('id', meetingData.id);
 
     // Step 7: Delete the blob file
-    try {
-      const blobPath = new URL(blobUrl).pathname;
-      await del(blobPath);
-    } catch (deleteError) {
-      // Continue anyway - file will expire eventually
+    if (blobUrl) {
+      try {
+        const blobPath = new URL(blobUrl).pathname;
+        await del(blobPath);
+      } catch (deleteError) {
+        // Continue anyway - file will expire eventually
+      }
     }
 
     return NextResponse.json({
